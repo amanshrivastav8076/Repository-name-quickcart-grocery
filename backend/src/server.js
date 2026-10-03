@@ -28,20 +28,23 @@ async function initDb(){
 const tokenFor=u=>jwt.sign({id:u.id,email:u.email,name:u.name,role:u.role},JWT_SECRET,{expiresIn:"7d"});
 async function sendOrderSms(phone,order){
   const key=process.env.FAST2SMS_API_KEY;
-  if(!key) return {sent:false,reason:"not_configured"};
-  const number=String(phone||"").replace(/\D/g,"");
-  if(number.length!==10) return {sent:false,reason:"invalid_phone"};
-  const message=`QuickCart: Order #${order.id} confirmed. Total ₹${order.total}. Payment: COD. Thank you for shopping!`;
+  if(!key){console.log("SMS: not_configured");return {sent:false,reason:"not_configured"};}
+  let number=String(phone||"").replace(/\D/g,"");
+  if(number.length===12&&number.startsWith("91"))number=number.slice(2);
+  if(number.length!==10){console.log("SMS: invalid_phone",number.length);return {sent:false,reason:"invalid_phone"};}
+  const message="QuickCart: Order #"+order.id+" confirmed. Total Rs."+order.total+". Payment: COD. Thank you for shopping!";
   try{
     const r=await fetch("https://www.fast2sms.com/dev/bulkV2",{
       method:"POST",
       headers:{"authorization":key,"content-type":"application/json"},
       body:JSON.stringify({route:"q",message,numbers:number,sms_details:"1"})
     });
-    const data=await r.json().catch(()=>({}));
-    if(!r.ok || data.return===false) return {sent:false,reason:"provider_error"};
-    return {sent:true};
-  }catch{return {sent:false,reason:"provider_unreachable"}}
+    const raw=await r.text();
+    let data={};try{data=JSON.parse(raw)}catch{}
+    console.log("SMS provider response:",JSON.stringify({httpStatus:r.status,ok:r.ok,return:data.return,message:data.message,requestId:data.request_id}));
+    if(!r.ok||data.return===false)return {sent:false,reason:"provider_error",providerStatus:r.status,providerMessage:data.message||null};
+    return {sent:true,providerStatus:r.status,providerMessage:data.message||null};
+  }catch(e){console.error("SMS provider unreachable:",e.message);return {sent:false,reason:"provider_unreachable"}}
 }
 const auth=async(req,res,next)=>{try{const h=req.headers.authorization||"";if(!h.startsWith("Bearer "))return res.status(401).json({message:"Login required"});req.user=jwt.verify(h.slice(7),JWT_SECRET);next()}catch{return res.status(401).json({message:"Invalid or expired token"})}};
 const userByEmail=async email=>pool?(await pool.query("SELECT * FROM users WHERE email=$1",[email.toLowerCase()])).rows[0]:memoryUsers.find(u=>u.email===email.toLowerCase());
