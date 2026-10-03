@@ -7,11 +7,11 @@ import pg from "pg";
 import {products as seedProducts} from "./data.js";
 dotenv.config();
 const {Pool}=pg;
-const app=express(),PORT=process.env.PORT||5000,JWT_SECRET=process.env.JWT_SECRET||"quickcart-demo-secret";
-app.use(cors({origin:"*",methods:["GET","POST","PUT","DELETE","PATCH","OPTIONS"]}));
+const app=express(),PORT=process.env.PORT||5000,JWT_SECRET=process.env.JWT_SECRET,ADMIN_EMAIL=(process.env.ADMIN_EMAIL||"").trim().toLowerCase(),ADMIN_PASSWORD=process.env.ADMIN_PASSWORD||"";\nif(!JWT_SECRET||JWT_SECRET.length<32){console.error("JWT_SECRET must be set to a random value of at least 32 characters");process.exit(1)}
+const allowedOrigins=(process.env.FRONTEND_URL||"*").split(",").map(x=>x.trim()).filter(Boolean);\napp.use(cors({origin:(origin,cb)=>{if(!origin||allowedOrigins.includes("*")||allowedOrigins.includes(origin))return cb(null,true);return cb(new Error("CORS origin not allowed"))},methods:["GET","POST","PUT","DELETE","PATCH","OPTIONS"]}));
 app.use(express.json());
 let pool=process.env.DATABASE_URL?new Pool({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false}}):null;
-const memoryUsers=[{id:1,name:"QuickCart Admin",email:"admin@quickcart.local",password:bcrypt.hashSync("QuickCart@123",10),role:"admin"}],memoryCarts=new Map(),memoryOrders=[];
+const memoryUsers=[],memoryCarts=new Map(),memoryOrders=[];
 let dbReady=false;
 async function initDb(){
  if(!pool)return;
@@ -21,8 +21,14 @@ async function initDb(){
  CREATE TABLE IF NOT EXISTS orders(id SERIAL PRIMARY KEY,user_id INTEGER REFERENCES users(id),subtotal INTEGER NOT NULL,delivery INTEGER NOT NULL,handling INTEGER NOT NULL,total INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'Confirmed',address JSONB NOT NULL,payment_method TEXT NOT NULL DEFAULT 'COD',created_at TIMESTAMPTZ DEFAULT now());
  CREATE TABLE IF NOT EXISTS order_items(id SERIAL PRIMARY KEY,order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,product_id INTEGER REFERENCES products(id),name TEXT NOT NULL,price INTEGER NOT NULL,qty INTEGER NOT NULL,line_total INTEGER NOT NULL)`);
  const count=await pool.query("SELECT COUNT(*)::int n FROM products"); if(!count.rows[0].n)for(const p of seedProducts)await pool.query("INSERT INTO products(id,name,category,price,icon,stock) VALUES($1,$2,$3,$4,$5,$6)",[p.id,p.name,p.category,p.price,p.icon,p.stock]);
- const admin=await pool.query("SELECT id FROM users WHERE email=$1",["admin@quickcart.local"]);
- if(!admin.rowCount)await pool.query("INSERT INTO users(name,email,password,role) VALUES($1,$2,$3,'admin')",["QuickCart Admin","admin@quickcart.local",await bcrypt.hash("QuickCart@123",10)]);
+ if(ADMIN_EMAIL&&ADMIN_PASSWORD){
+   const admin=await pool.query("SELECT id FROM users WHERE email=$1",[ADMIN_EMAIL]);
+   const hash=await bcrypt.hash(ADMIN_PASSWORD,10);
+   if(!admin.rowCount)await pool.query("INSERT INTO users(name,email,password,role) VALUES($1,$2,$3,'admin')",["QuickCart Admin",ADMIN_EMAIL,hash]);
+   else await pool.query("UPDATE users SET password=$1,role='admin' WHERE email=$2",[hash,ADMIN_EMAIL]);
+ } else {
+   console.warn("ADMIN_EMAIL/ADMIN_PASSWORD not configured; no admin account will be seeded or changed");
+ }
  dbReady=true;
 }
 const tokenFor=u=>jwt.sign({id:u.id,email:u.email,name:u.name,role:u.role},JWT_SECRET,{expiresIn:"7d"});
