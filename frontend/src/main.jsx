@@ -13,7 +13,7 @@ function App(){
  useEffect(()=>{localStorage.setItem("qc_wishlist",JSON.stringify(wish))},[wish]);
  useEffect(()=>{api("/categories").then(setCats).catch(()=>{});load()},[cat,q,sort]);
  useEffect(()=>{if(localStorage.getItem("qc_token"))Promise.all([api("/me"),api("/cart")]).then(([u,c])=>{setUser(u);setCart(c)}).catch(()=>localStorage.removeItem("qc_token"))},[]);
- async function load(){setLoading(true);try{const p=new URLSearchParams({category:cat,q,sort});setProducts(await api("/products?"+p))}catch(e){notify(e.message)}finally{setLoading(false)}}
+ async function load(){setLoading(true);try{const p=new URLSearchParams({category:cat==="Wishlist"?"All":cat,q,sort});setProducts(await api("/products?"+p))}catch(e){notify(e.message)}finally{setLoading(false)}}
  function notify(x){setToast(x);setTimeout(()=>setToast(""),2200)}
  async function add(p,d=1){if(!user){setModal("login");return}const old=cart.find(x=>x.id===p.id)?.qty||0;try{setCart(await api("/cart/"+p.id,{method:"PUT",body:JSON.stringify({qty:Math.max(0,old+d)})}));if(d>0)notify("Added to cart")}catch(e){notify(e.message)}}
  function toggle(id){setWish(w=>w.includes(id)?w.filter(x=>x!==id):[...w,id]);notify(wish.includes(id)?"Removed from wishlist":"Saved to wishlist")}
