@@ -27,7 +27,8 @@ async function initDb(){
    if(!admin.rowCount)await pool.query("INSERT INTO users(name,email,password,role) VALUES($1,$2,$3,'admin')",["QuickCart Admin",ADMIN_EMAIL,hash]);
    else await pool.query("UPDATE users SET password=$1,role='admin' WHERE email=$2",[hash,ADMIN_EMAIL]);
  } else {
-   console.warn("ADMIN_EMAIL/ADMIN_PASSWORD not configured; no admin account will be seeded or changed");
+   await pool.query("UPDATE users SET role='customer' WHERE email='admin@quickcart.local'");
+   console.warn("ADMIN_EMAIL/ADMIN_PASSWORD not configured; default admin account has been disabled");
  }
  dbReady=true;
 }
