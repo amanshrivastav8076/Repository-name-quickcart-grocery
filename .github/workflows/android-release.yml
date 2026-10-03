@@ -1,0 +1,60 @@
+name: Build QuickCart Android Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build web app
+        env:
+          VITE_API_URL: https://quickcart-api-prod.onrender.com/api
+        run: npm run build
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build release APK
+        run: cd android && ./gradlew assembleRelease
+
+      - name: Build release AAB
+        run: cd android && ./gradlew bundleRelease
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuickCart-Android-Release
+          path: |
+            frontend/android/app/build/outputs/apk/release/app-release-unsigned.apk
+            frontend/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
