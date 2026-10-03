@@ -29,7 +29,7 @@ const tokenFor=u=>jwt.sign({id:u.id,email:u.email,name:u.name,role:u.role},JWT_S
 async function sendOrderSms(phone,order){
   const key=process.env.FAST2SMS_API_KEY;
   if(!key) return {sent:false,reason:"not_configured"};
-  const number=String(phone||"").replace(/\\D/g,"");
+  const number=String(phone||"").replace(/\D/g,"");
   if(number.length!==10) return {sent:false,reason:"invalid_phone"};
   const message=`QuickCart: Order #${order.id} confirmed. Total ₹${order.total}. Payment: COD. Thank you for shopping!`;
   try{
