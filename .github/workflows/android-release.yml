@@ -44,17 +44,57 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Build release APK
-        run: cd android && ./gradlew assembleRelease
+      - name: Configure Android signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/quickcart-release.jks
+          cat > android/app/signing.gradle <<'EOF'
+          def keystoreFile = file(project.findProperty("quickcartKeystoreFile") ?: "quickcart-release.jks")
+          android {
+              signingConfigs {
+                  release {
+                      storeFile keystoreFile
+                      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                      keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          EOF
+          printf '\napply from: "signing.gradle"\n' >> android/app/build.gradle
 
-      - name: Build release AAB
-        run: cd android && ./gradlew bundleRelease
+      - name: Build signed release APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: cd android && ./gradlew assembleRelease -PquickcartKeystoreFile=quickcart-release.jks
 
-      - name: Upload release artifacts
+      - name: Build signed release AAB
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: cd android && ./gradlew bundleRelease -PquickcartKeystoreFile=quickcart-release.jks
+
+      - name: Upload signed release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: QuickCart-Android-Release
+          name: QuickCart-Android-Signed-Release
           path: |
-            frontend/android/app/build/outputs/apk/release/app-release-unsigned.apk
+            frontend/android/app/build/outputs/apk/release/app-release.apk
             frontend/android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
